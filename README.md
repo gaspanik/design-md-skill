@@ -4,10 +4,6 @@ Register this skill in Figma's custom skill feature and run it from the chat. It
 
 > *日本語 README はこちら: [README.ja.md](README.ja.md)*
 
-> **About the paid course**: This skill is identical in content — not a feature-trimmed edition — to one of the 21 skills bundled in the paid course "[KMRVID Figma Skills](https://kmrvid-claude-skills.gaspanik.workers.dev/figma/)". Full catalog: [KMRVID Figma Skills README](https://fragrant-edam-563.notion.site/KMRVID-Figma-Skills-README-md-3ad5dae25dd280d69c12c69b277d90b6)
-
-> **Course preview**: See the skills in action on [YouTube](https://www.youtube.com/@kmrvid/videos) or the course's [free preview](https://kmrvid.com/apps/ldt-course/course/6922c0ad336ff5545bbff61d/6a6b17c49dc4e0183716f605?locale=en) (no signup required).
-
 ---
 
 ## What this is
@@ -106,13 +102,13 @@ Attach a DESIGN.md file to go straight into Import mode, or run with nothing att
 ## Example output
 
 ```
-Import 完了報告 — RawBlock Design System
+Import complete — RawBlock Design System
 
-検出セクション: Colors ✓ / Typography ✓ / Spacing ✓ / Border Radius ✓ / Components ✓
+Sections detected: Colors ✓ / Typography ✓ / Spacing ✓ / Border Radius ✓ / Components ✓
 
-変数コレクション: 4コレクション作成、変数34個 全数一致
-テキストスタイル: 8個作成（fontSizeバインド 8/8確認、フォント代替なし）
-コンポーネント: 11個作成（カラーfillsバインド 8/10、Ghost・Inputは意図的にtransparent）
+Variable collections: 4 created, 34 variables — all matched
+Text styles: 8 created (fontSize binding confirmed 8/8, no font substitution)
+Components: 11 created (color-fill binding 8/10 — Ghost and Input are intentionally transparent)
 ```
 
 ---
