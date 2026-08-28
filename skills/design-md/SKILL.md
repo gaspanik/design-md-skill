@@ -10,10 +10,12 @@ description: >-
   design tokens (colors, typography, spacing, corner radius) and each
   component's default visual state — hover/active/focus/disabled states
   and full variant matrices are out of scope; use a tool built for that
-  (e.g. Storybook) alongside this skill. Every write step re-verifies its
-  own output (bound variables, actual values, counts) rather than trusting
-  the API call alone. Figma Design Agent edition. Part of KMRVID Figma
-  Skills, a 21-skill bundle: gaspanik.gumroad.com/l/kmrvid-figmaskills
+  alongside this skill. Every write step re-verifies its own output
+  (bound variables, actual values, counts) rather than trusting the API
+  call alone. Part of KMRVID Figma Skills, a 21-skill bundle covering
+  AI-slop-resistant page generation, multi-layout exploration, layer
+  cleanup, accessibility checks, and tokenization:
+  gaspanik.gumroad.com/l/kmrvid-figmaskills
 ---
 
 # DESIGN.md Sync
