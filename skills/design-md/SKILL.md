@@ -21,7 +21,7 @@ description: >-
 
 # DESIGN.md Sync
 
-**Ver:** ver.202609101650
+**Ver:** ver.202609101715
 
 A skill that syncs DESIGN.md and a Figma file bidirectionally. Conforms to the Google design.md spec (https://github.com/google-labs-code/design.md/blob/main/docs/spec.md).
 
@@ -207,8 +207,8 @@ If creating it, use `create_design` to generate a 1280px-wide document page cont
 ### Preview page structure
 
 1. **Header** — display the system name (the frontmatter's `name`) in a Display style. Darkest neutral background + white text
-2. **Colors section** — show every frontmatter color in a swatch grid (color name, HEX value, variable-bound)
-3. **Typography section** — show every Text Style created, grouped by category (Heading / Body / Caption). Each row shows the style name/spec on the left and sample text on the right
+2. **Colors section** — show every frontmatter color in a swatch grid (color name, HEX value). **Each swatch's fill must be bound to the actual corresponding Figma variable (`setBoundVariableForPaint`).** Don't bind to a different variable just because it looks similar or shares the same HEX (e.g. two colors that are the same `#1a1a1a` but differ only in opacity) — match by variable name/id, not by visual similarity. After binding, verify each swatch's `boundVariables` points to the intended variable and its opacity matches that variable's value; report as "Confirmed variable binding on N of N colors"
+3. **Typography section** — show every Text Style created, grouped by category (Heading / Body / Caption). Each row shows the style name/spec on the left and sample text on the right. **The sample text must have the actual Text Style applied via `textNode.textStyleId = style.id`.** Don't approximate the font/weight/size independently by eye (`create_design` has a known bug of substituting an unrelated "similar-looking" font). After applying, verify each sample text's `textStyleId` points to the intended Text Style; report as "Confirmed application on N of N text styles"
 4. **Spacing section** — visualize spacing tokens as horizontal bar lengths (with value labels)
 5. **Rounded section** (if applicable) — visualize corner-radius tokens with preview rectangles
 6. **Components section (text only in Import mode)** — Import Step 4 doesn't create any Figma node, so place no visual placeholder or instance. For each component, lay out its name, property list (only the keys that actually exist among `backgroundColor`/`textColor`/`padding`/`border`/`rounded`), and token references as a text-only card. **Only list properties that actually exist in that component's `components` definition.** Don't add `width`, `height`, `spacing` (gap), or anything else not in the `components` definition — writing information that isn't there makes it look like DESIGN.md captured something it didn't. (Export mode's preview differs from this — it may place a real instance of the actual component, since it exists in the live file; see Export Step 2.5)
@@ -222,6 +222,8 @@ Include the following in `instructions`:
 - The content of each section (list the specific token values and style names extracted from the frontmatter)
 - State explicitly that the Components section is text-only — no instance, placeholder rectangle, or other visual element; just each component's name, property list, and token references laid out as text cards
 - State explicitly that the property list must only include keys that actually exist in that component's `components` definition. Explicitly prohibit reading additional properties (width/height/spacing/gap, etc.) from the live Figma file and adding them to the list — `create_design` has access to the live file, so without this constraint it will fill gaps on its own
+- **State explicitly that each Colors swatch must be bound to its actual Figma variable (not chosen by visual similarity), and that opacity must match that variable's value** — two colors sharing the same HEX but different opacity must not be conflated
+- **State explicitly that each Typography sample text must have the actual created Text Style applied, not an independently-chosen approximate font/weight/size**
 - The overall tone direction ("minimal, editorial, generous whitespace")
 - Instruction that the page itself should use the file's variables and Text Styles
 
