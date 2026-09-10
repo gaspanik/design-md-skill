@@ -21,7 +21,7 @@ description: >-
 
 # DESIGN.md Sync
 
-**Ver:** ver.202609101615
+**Ver:** ver.202609101621
 
 A skill that syncs DESIGN.md and a Figma file bidirectionally. Conforms to the Google design.md spec (https://github.com/google-labs-code/design.md/blob/main/docs/spec.md).
 
@@ -483,9 +483,11 @@ If the collected variables, text styles, and components all come to 0, abort DES
 - Token references are `"{path.to.token}"`
 - fontWeight is a number
 - lineHeight is a ratio or a dimension
-- `colors.primary` is required
+- `colors.primary` is required. If a variable in the file already resolves to `primary` after stripping its prefix (e.g. `brand/primary` → `primary`), use it as-is. **If none exists, don't substitute a different color as `primary` to fill the gap** — instead, report in the Step 6 completion report that no `primary`-named variable was found, and either leave `colors.primary` unset or ask the user which color to assign
 - Don't use `transparent` for `backgroundColor`
-- Every custom color must be referenced by at least one component
+- **A color variable's output key is exactly its Figma name with the collection/group prefix stripped, nothing else.** Never change a color's key, or substitute it for another color's key, based on whether it's referenced from `components`
+
+**Colors always sync in full** (see "Scope" above). A color variable that no `components` entry happens to reference is still kept in the frontmatter's `colors` — never dropped or renamed. The only case where a color is removed or renamed is when it no longer exists as a Figma variable. "Unreferenced" is reported as a count in the consistency check below, nothing more.
 
 ### Markdown body (fixed section order)
 
@@ -506,7 +508,7 @@ Generate the body by objectively inferring from the frontmatter's token values. 
 
 Don't stop at "I checked it" — mechanically count the following and report the counts to yourself. A visual-only self-report (e.g. "no contradictions," "consistent," without counts) is not acceptable:
 
-- For every color listed in the frontmatter's `colors`, count one by one whether it's referenced at least once in the `components` definitions (as a token reference in `backgroundColor`/`textColor`/`borderColor`, etc.). Report it as "N of N colors referenced (unreferenced: list of color names)", and if any are unreferenced, decide whether to revise the component definitions or remove that color from the frontmatter.
+- For every color listed in the frontmatter's `colors`, count one by one whether it's referenced at least once in the `components` definitions (as a token reference in `backgroundColor`/`textColor`/`borderColor`, etc.). Report it as "N of N colors referenced (unreferenced: list of color names)". **Do not remove unreferenced colors from the frontmatter** — colors sync in full regardless of whether a component happens to reference them (see "Token rules" above). Report the count only.
 - Identify every place in the body (Overview through Do's and Don'ts) that mentions a specific number or token name, and cross-check each one against the corresponding frontmatter value. If there's a mismatch, fix the body before outputting. Report as "N of N body mentions matched".
 - Check each `Do's and Don'ts` item, one by one, for contradictions with the `components` definitions (e.g. saying "don't use corner radius" while a component with a `rounded` token exists), and fix the wording if there's a contradiction.
 
