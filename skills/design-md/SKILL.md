@@ -20,7 +20,7 @@ description: >-
 
 # DESIGN.md Sync
 
-**Ver:** ver.202609101832
+**Ver:** ver.202609101854
 
 A skill that syncs DESIGN.md and a Figma file bidirectionally. Conforms to the Google design.md spec (https://github.com/google-labs-code/design.md/blob/main/docs/spec.md).
 
@@ -45,7 +45,7 @@ This skill syncs:
 **Whether Import creates a component as a Figma node branches on whether its size can be determined without inventing a value.**
 
 - **Both `width` and `height` present (fixed-size components — buttons, chips, pills with a fixed size):** create an actual Figma component at that fixed size. The 6 fields — fills/strokes/padding/cornerRadius/width/height — describe the appearance almost completely, so this is a legitimate reconstruction, not fabrication.
-- **`width`/`height` absent, but `padding` has at least one non-zero value (Hug-contents components — very common for real-world buttons, whose size derives from content + padding rather than a fixed size):** create an actual Figma component, but leave sizing as Hug on both axes instead of a fixed size. With no children, Figma's own Auto Layout engine derives the minimum size from padding alone — that's a legitimate, non-invented result, not a raw measured value or a guess.
+- **`width`/`height` absent, but `padding` has at least one non-zero value (Hug-contents components — very common for real-world buttons, whose size derives from content + padding rather than a fixed size):** create an actual Figma component, sized by computing `paddingLeft + paddingRight` × `paddingTop + paddingBottom` and calling `resize()` to it (relying on Figma's own Hug sizing with no children doesn't work — it produces a generic default size unrelated to padding, confirmed live). That computed size is a legitimate, non-invented result derived mechanically from real padding tokens, not a raw measured value or a guess.
 - **Neither of the above (composite components — cards, rows):** don't create a Figma node. Nothing determines even a minimal size, so a node would just be a same-size empty box indistinguishable from other components' boxes.
 
 In every branch, text content is still out of scope, so **don't create a text child node** (even when `textColor` is known, apply it only to the property list as reference info, not to the component itself) — an empty text placeholder also risks the "FILL sizing collapses" bug confirmed live in this session.
@@ -201,7 +201,7 @@ Create any Text Style that uses a font listed in `failed` with the `fallback` (I
 Read the frontmatter's `components` definitions. For each entry, branch on whether its size can be determined without inventing a value (see "Scope" above):
 
 - `width` and `height` both present → **Branch A (fixed size)**
-- `width`/`height` absent, but `padding` has at least one non-zero value → **Branch B (Hug size)**
+- `width`/`height` absent, but `padding` has at least one non-zero value → **Branch B (padding-derived size)**
 - Neither → **Branch C (reference info only, no node)**
 
 **If width/height/padding aren't at the entry's top level, also check the first variant under `variants`.** A component with variants (buttons, etc.) may not have flat top-level properties like Header/Footer do — everything can be nested under `variants.<name>` instead (confirmed live: checking only the top level misclassified such a component into Branch C). Since size rarely differs between style variants, it's fine to use the first variant's values as representative. When Branch A or B creates a node, bind fills/strokes/padding/cornerRadius/width/height from the first variant too if they're absent at the top level (never from a `states` override — only the variant's own base values).
@@ -256,25 +256,28 @@ Resize to the token's actual value first, then bind with `setBoundVariable` (ord
 
 Report the result with explicit counts, in the form "Confirmed variable binding on N of N components". Fix any mismatch on the spot before moving on.
 
-### Branch B: width/height absent, but padding has a non-zero value — create at a Hug size
+### Branch B: width/height absent, but padding has a non-zero value — create at a padding-derived size
 
-Common for real-world buttons using Auto Layout's "Hug contents" — the size derives from content + padding rather than being fixed. **Don't fix the size; set both axes to Hug** (`primaryAxisSizingMode`/`counterAxisSizingMode` to `'AUTO'`). Don't call `resize()` (it would reset sizing to FIXED, and there's no size value to resize to anyway). With no children, Figma's own Auto Layout engine derives the minimum size from padding alone — a legitimate, non-invented result, not a measured value or a guess.
+Common for real-world buttons using Auto Layout's "Hug contents" — the size derives from content + padding rather than being fixed.
 
-    component.layoutMode = 'HORIZONTAL'; // or 'VERTICAL' — doesn't affect appearance with no children
-    component.primaryAxisSizingMode = 'AUTO';
-    component.counterAxisSizingMode = 'AUTO';
-    // then bind fills/strokes/padding/cornerRadius variables as above (no width/height binding)
+**[Important — corrected after live testing]** The original assumption here — "with no children, Figma's own Auto Layout engine derives the minimum size from padding alone if both axes are set to Hug" — turned out to be wrong. Live testing showed that with no children, setting `primaryAxisSizingMode`/`counterAxisSizingMode` to `'AUTO'` produces Figma's generic default size (100×100), unrelated to the padding values. So don't rely on Hug — **compute the size explicitly from padding and `resize()` to it:**
+
+    const width = paddingLeft + paddingRight;
+    const height = paddingTop + paddingBottom;
+    component.resize(width, height);
+    // sizingMode can stay FIXED after this — the size is a mechanical derivation from real padding tokens, not an invented or guessed value
+    // then bind fills/strokes/padding/cornerRadius variables as above (no width/height binding — width/height themselves aren't tokens here, just a computed result from padding tokens)
 
 **Import Step 4-verify (mandatory, do not skip, Branch B):** Re-fetch every component you created and check, reporting counts:
 - Whether the variables specified for `fills`/`strokes`/`padding`/`cornerRadius` are actually reflected in `boundVariables`
-- Whether `primaryAxisSizingMode`/`counterAxisSizingMode` are still `'AUTO'` as intended (not accidentally reset to FIXED by a stray `resize()` call)
+- Whether the actual node size matches `paddingLeft + paddingRight` × `paddingTop + paddingBottom` (not left at Figma's default size)
 - That no text child node was created
 
-Report the result with explicit counts, in the form "Confirmed variable binding on N of N components / Hug sizing confirmed on N of N".
+Report the result with explicit counts, in the form "Confirmed variable binding on N of N components / size calculation confirmed on N of N".
 
 ### Branch C: neither width/height nor non-zero padding — reference info only
 
-**Do not create any component nodes in Figma.** Why: child layer structure, Auto Layout, text content, and images remain out of scope, and with nothing to determine even a minimal size (no fixed size, no padding to Hug around), a node would just be a same-size empty box indistinguishable from other components' boxes.
+**Do not create any component nodes in Figma.** Why: child layer structure, Auto Layout, text content, and images remain out of scope, and with nothing to determine even a minimal size (no fixed size, no padding to compute one from), a node would just be a same-size empty box indistinguishable from other components' boxes.
 
 This case only does two things:
 - Confirm that each component definition's token references (e.g. `"{colors.primary}"`) resolve correctly to the variables created in Step 2 (call out any reference that doesn't resolve in the Step 6 completion report)
@@ -363,7 +366,7 @@ Report the creation results together with each verify step's verification result
 - Whether there was a naming-convention conflict with existing tokens, and the chosen resolution (if Import Step 2 triggered a confirmation)
 - Number of text styles (including Step 3-verify's fontSize binding confirmation / value-match counts)
 - Whether a font substitution occurred (if Import Step 3 triggered a fallback, the original font → substitute font and affected styles)
-- Component breakdown (of the total `components` entries, how many became Figma nodes via Branch A [fixed] / Branch B [Hug], with each branch's Step 4-verify counts, vs. how many stayed reference-info only via Branch C)
+- Component breakdown (of the total `components` entries, how many became Figma nodes via Branch A [fixed] / Branch B [padding-derived], with each branch's Step 4-verify counts, vs. how many stayed reference-info only via Branch C)
 - Number of document frames (if created)
 - Whether a preview page was created (attach a node link if it was)
 
@@ -403,6 +406,8 @@ Classify variables into categories based on resolvedType and the collection-name
     }
 
 Resolve VARIABLE_ALIAS targets recursively before converting.
+
+**Exclude any color with opacity below 100% from `colors` entirely.** The Google design.md spec only allows 6-digit HEX (no alpha channel), so converting a translucent color to 6-digit HEX would silently produce inaccurate data — the value is written out, but it no longer matches what the color actually looks like (a translucent black becomes an opaque one). This is the one exception to the earlier-established "colors always sync in full" principle, and it's the *only* valid reason for exclusion: **the format itself can't represent the value** (excluding a color because "no component references it" is still forbidden). Note excluded colors in the Step 2 completion report as "excluded for opacity: list of color names." Don't ask the user each time — if they explicitly want opacity preserved, consider an 8-digit HEX output instead (and state clearly that this deviates from the Google spec).
 
 ### Collecting text styles
 
@@ -510,7 +515,7 @@ If the collected variables, text styles, and components all come to 0, abort DES
 - Don't use `transparent` for `backgroundColor`
 - **A color variable's output key is exactly its Figma name with the collection/group prefix stripped, nothing else.** Never change a color's key, or substitute it for another color's key, based on whether it's referenced from `components`
 
-**Colors always sync in full** (see "Scope" above). A color variable that no `components` entry happens to reference is still kept in the frontmatter's `colors` — never dropped or renamed. The only case where a color is removed or renamed is when it no longer exists as a Figma variable. "Unreferenced" is reported as a count in the consistency check below, nothing more.
+**Colors always sync in full** (see "Scope" above). A color variable that no `components` entry happens to reference is still kept in the frontmatter's `colors` — never dropped or renamed. A color is removed or renamed only when it no longer exists as a Figma variable, or when its opacity is below 100% and the format itself can't represent it (see "HEX conversion for color variables" above). "Unreferenced" is reported as a count in the consistency check below, nothing more.
 
 ### Markdown body (fixed section order)
 
