@@ -20,7 +20,7 @@ description: >-
 
 # DESIGN.md Sync
 
-**Ver:** ver.202609101928
+**Ver:** ver.202609101946
 
 A skill that syncs DESIGN.md and a Figma file bidirectionally. Conforms to the Google design.md spec (https://github.com/google-labs-code/design.md/blob/main/docs/spec.md).
 
@@ -525,6 +525,7 @@ If the collected variables, text styles, and components all come to 0, abort DES
 - lineHeight is a ratio or a dimension
 - `colors.primary` is required. If a variable in the file already resolves to `primary` after stripping its prefix (e.g. `brand/primary` → `primary`), use it as-is. **If none exists, don't substitute a different color as `primary` to fill the gap** — instead, report in the Step 6 completion report that no `primary`-named variable was found, and either leave `colors.primary` unset or ask the user which color to assign
 - Don't use `transparent` for `backgroundColor`
+- **`padding` is always an object with all four keys `top`/`right`/`bottom`/`left`.** Never use a `vertical`/`horizontal` shorthand or a single scalar value. Google's spec only defines `padding: <Dimension>` — the object shape itself is an implementation-specific extension, so lock it down to avoid inconsistent notation within one file (confirmed live: the same file mixed top/right/bottom/left on some components with vertical/horizontal on another — since Import's padding-derived sizing reads the key names directly, inconsistent notation breaks that size calculation)
 - **A color variable's output key is exactly its Figma name with the collection/group prefix stripped, nothing else.** Never change a color's key, or substitute it for another color's key, based on whether it's referenced from `components`
 
 **Colors always sync in full** (see "Scope" above). A color variable that no `components` entry happens to reference is still kept in the frontmatter's `colors` — never dropped or renamed. A color is removed or renamed only when it no longer exists as a Figma variable, or when its opacity is below 100% and the format itself can't represent it (see "HEX conversion for color variables" above). "Unreferenced" is reported as a count in the consistency check below, nothing more.
