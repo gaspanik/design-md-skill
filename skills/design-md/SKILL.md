@@ -21,7 +21,7 @@ description: >-
 
 # DESIGN.md Sync
 
-**Ver:** ver.202609101543
+**Ver:** ver.202609101605
 
 A skill that syncs DESIGN.md and a Figma file bidirectionally. Conforms to the Google design.md spec (https://github.com/google-labs-code/design.md/blob/main/docs/spec.md).
 
@@ -264,7 +264,7 @@ If creating it, use `create_design` to generate a 1280px-wide document page cont
 3. **Typography section** — show every Text Style created, grouped by category (Heading / Body / Caption). Each row shows the style name/spec on the left and sample text on the right
 4. **Spacing section** — visualize spacing tokens as horizontal bar lengths (with value labels)
 5. **Rounded section** (if applicable) — visualize corner-radius tokens with preview rectangles
-6. **Components section** — place a token-bound placeholder at the top of each card (an instance of the empty-shell component this skill created; if it exceeds the card width, a screenshot image per "Handling components wider than the card" below), and show the component name, property list, and token references beneath it. **This placeholder does not reproduce the original file's actual card/button/etc. appearance** (see "Scope" above) — avoid labels like "real preview" or "what the component looks like" that could mislead; call it a "token preview" instead
+6. **Components section** — place a token-bound placeholder at the top of each card (an instance of the empty-shell component this skill created; if it exceeds the card width, a screenshot image per "Handling components wider than the card" below), and show the component name, property list, and token references beneath it. **This placeholder does not reproduce the original file's actual card/button/etc. appearance** (see "Scope" above) — avoid labels like "real preview" or "what the component looks like" that could mislead; call it a "token preview" instead. **Only list properties that actually exist in that component's `components` definition (fills/textColor/padding/border/rounded).** Don't mix in `width`, `height`, `spacing` (gap), or other properties that can be read from the live Figma file but aren't part of the `components` definition — listing a property that isn't in the definition makes it look like DESIGN.md captured information it didn't
 
 Include in the preview only the sections that exist in the frontmatter (e.g. omit the Rounded section if `rounded` isn't defined). The Markdown body (Overview / Do's and Don'ts, etc.) is out of scope for the preview — that's prose content that should be referenced from the DESIGN.md file itself.
 
@@ -274,6 +274,7 @@ Include the following in `instructions`:
 - The system name and the page's purpose ("{name} Design System — DESIGN.md Preview")
 - The content of each section (list the specific token values and style names extracted from the frontmatter)
 - State explicitly that the Components section places a token-bound placeholder (an instance, or a screenshot if it's too wide) at the top of each card, with the property list attached below it — don't settle for a metadata table alone. Also state that this placeholder does not reproduce the original file's actual appearance
+- State explicitly that the property list must only include keys that actually exist in that component's `components` definition. Explicitly prohibit reading additional properties (width/height/spacing/gap, etc.) from the live Figma file and adding them to the list — `create_design` has access to the live file, so without this constraint it will fill gaps on its own
 - The overall tone direction ("minimal, editorial, generous whitespace")
 - Instruction that the page itself should use the file's variables and Text Styles
 
@@ -521,6 +522,7 @@ If creating it, generate the preview page using `create_design`. The structure f
 - The preview page's content treats the frontmatter values generated in Export Step 2 as authoritative (the values written out to DESIGN.md, not the file's live variable values)
 - Style the page using the file's existing variables and Text Styles as-is (don't create new ones)
 - In the Components section, show the name, properties, and token references of the components detected during Export (label it as reference info, not a reproduction of the original)
+- **The properties table may only list keys that actually appear in the generated DESIGN.md's `components` entry.** The original component being exported is real and lives in the live file, so `width`/`height`/`spacing` (gap) etc. can be read from it — but since those aren't part of the `components` definition, don't add them to the preview either. Adding a value to the preview alone that isn't in DESIGN.md implies DESIGN.md captured information it didn't
 
 ## Export Step 3 — Output
 
