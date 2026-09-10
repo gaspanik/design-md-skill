@@ -20,7 +20,7 @@ description: >-
 
 # DESIGN.md Sync
 
-**Ver:** ver.202609101946
+**Ver:** ver.202609101949
 
 A skill that syncs DESIGN.md and a Figma file bidirectionally. Conforms to the Google design.md spec (https://github.com/google-labs-code/design.md/blob/main/docs/spec.md).
 
@@ -565,6 +565,7 @@ If creating it, generate the preview page using `create_design`. The Colors/Typo
 ### Export-specific notes
 
 - The preview page's content treats the frontmatter values generated in Export Step 2 as authoritative (the values written out to DESIGN.md, not the file's live variable values)
+- **[Important — bug confirmed live] The Colors section swatches only the keys actually written to the DESIGN.md frontmatter's `colors` — never enumerate the live file's color variables directly.** A color excluded for opacity below 100% (see "HEX conversion for color variables" above) still exists as a real variable in the live file, so building the section straight from the file lets excluded colors slip into the preview (confirmed live: `neutral900A8`/`neutral900A14`, both absent from `colors`, appeared as swatches). Showing a color the DESIGN.md doesn't actually contain implies DESIGN.md captured it — mention excluded colors only in the completion report, never in the preview
 - Style the page using the file's existing variables and Text Styles as-is (don't create new ones)
 - **The Components section may place an instance of the real, exported component at the top of each card** (screenshot fallback via exportAsync if it's wider than the card). This is simply showing what genuinely exists in the file — not fabrication. The property list and token references beneath it should still be labeled as reference info, understood as a restatement of what's written to DESIGN.md
 - **The properties table may only list keys that actually appear in the generated DESIGN.md's `components` entry.** The original component being exported is real and lives in the live file, so `spacing` (gap) is always readable, and `width`/`height` are readable even when unbound — but any key not actually in the `components` definition (including an unbound width/height) stays out of the preview too. Adding a value to the preview alone that isn't in DESIGN.md implies DESIGN.md captured information it didn't
