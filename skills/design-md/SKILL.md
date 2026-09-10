@@ -21,7 +21,7 @@ description: >-
 
 # DESIGN.md Sync
 
-**Ver:** ver.202609101605
+**Ver:** ver.202609101615
 
 A skill that syncs DESIGN.md and a Figma file bidirectionally. Conforms to the Google design.md spec (https://github.com/google-labs-code/design.md/blob/main/docs/spec.md).
 
@@ -35,15 +35,17 @@ A skill that syncs DESIGN.md and a Figma file bidirectionally. Conforms to the G
 
 This skill syncs:
 - Base design tokens: colors, typography, spacing, corner radius (round-trips exactly, value for value)
-- Each component's **reference info**: token references for the root node's own `fills`/`text` (text child node color)/`padding`/`border`/`corner radius` only
+- Each component's **reference info**: only these 5 fields — `fills` (background), `strokes` (border), `padding`, `corner radius` (the component's own root node properties), and **one direct text child node's `fills`** (as `textColor` — the sole "read a child" exception)
 
-**Components are reference info, not a reconstruction.** Each `components` entry is a record of which tokens a component uses — nothing more. Child layer structure, Auto Layout, sizing, text content, images/slots, per-child fills and placement, and component properties are all out of scope. On Import, the component this skill creates is an empty shell — root-level properties bound to tokens — and does not reproduce the original card/button/etc.'s actual appearance.
+**If even one of these 5 fields is readable, include the component.** `textColor` is a first-class collection target on the same footing as the root-level properties — don't treat it as "a child layer" and exclude it. Many components have no fill of their own and are defined entirely by their text color; excluding `textColor` drops essentially every text-driven component (cards, rows, list items) from collection entirely.
+
+**Components are reference info, not a reconstruction.** Each `components` entry is a record of which tokens a component uses — nothing more. Beyond the 5 fields above — child layer structure, Auto Layout, sizing, the text content itself, images/slots, fills/placement of any child other than the one text node, and component properties — are all out of scope. On Import, the component this skill creates is an empty shell — the 5 fields above bound to tokens — and does not reproduce the original card/button/etc.'s actual appearance.
 
 It deliberately does **not** attempt to capture:
 - Interaction states (hover, active, focus, disabled) or their color/style overrides
 - Component variant sets beyond what's already present as native Figma variants
 - Anything with no equivalent field in Figma's variable/style/component model (e.g. CSS `text-transform`, letter-tracking values, custom cursors)
-- A component's child layer structure, Auto Layout, sizing, text content, images/slots, or component properties (as above, only root-level token references are in scope)
+- A component's child layer structure, Auto Layout, sizing, the text content itself, images/slots, or component properties (the direct text child's `fills` — i.e. `textColor` — is the one exception; no other child is in scope)
 
 If a source DESIGN.md describes a component category that doesn't fit this model at all (for example, a shape that conflicts with the rest of the system's token rules, such as a circular element in an otherwise zero-corner-radius system), Import may reasonably skip it — this is expected, not a bug, and gets called out in the Step 6 completion report rather than silently dropped.
 
@@ -415,15 +417,15 @@ Extract from each style:
     const components = figma.currentPage.findAll(n => n.type === 'COMPONENT');
     const componentSets = figma.currentPage.findAll(n => n.type === 'COMPONENT_SET');
 
-**Only root-node-level properties are collected (reference info).** Don't descend into child layers or Auto Layout structure:
+**Only the following 5 fields are collected (reference info).** Don't descend into any other child layer or Auto Layout structure:
 
 - `fills` → `backgroundColor` (if variable-bound, output as `"{colors.xxx}"`)
-- A text child node's `fills` → `textColor`
+- **One direct text child node's `fills` → `textColor`** (the sole "read a child" exception — don't exclude this as "a child layer"; many components have no fill of their own and are defined entirely by text color, so excluding `textColor` causes mass collection drop-out)
 - `padding*` → `padding`
 - `cornerRadius` → `rounded` (a token reference if variable-bound)
 - `strokes` → `borderColor`
 
-If none of these can be read (the component has no such properties at the root level), exclude it from collection rather than emitting an empty `components` entry.
+**Include the component if even one of these 5 fields is readable.** Only exclude it from collection (rather than emitting an empty `components` entry) if *all five* are unreadable — no fills/strokes/padding/cornerRadius on the root AND no direct text child. Before excluding, check each of the 5 individually — don't mistake "only `textColor` was found" for "nothing was found."
 
 For a component set, extract properties from the variant names, and record derived states like hover as diffs only.
 
