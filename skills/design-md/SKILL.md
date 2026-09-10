@@ -20,7 +20,7 @@ description: >-
 
 # DESIGN.md Sync
 
-**Ver:** ver.202609101803
+**Ver:** ver.202609101832
 
 A skill that syncs DESIGN.md and a Figma file bidirectionally. Conforms to the Google design.md spec (https://github.com/google-labs-code/design.md/blob/main/docs/spec.md).
 
@@ -203,6 +203,8 @@ Read the frontmatter's `components` definitions. For each entry, branch on wheth
 - `width` and `height` both present → **Branch A (fixed size)**
 - `width`/`height` absent, but `padding` has at least one non-zero value → **Branch B (Hug size)**
 - Neither → **Branch C (reference info only, no node)**
+
+**If width/height/padding aren't at the entry's top level, also check the first variant under `variants`.** A component with variants (buttons, etc.) may not have flat top-level properties like Header/Footer do — everything can be nested under `variants.<name>` instead (confirmed live: checking only the top level misclassified such a component into Branch C). Since size rarely differs between style variants, it's fine to use the first variant's values as representative. When Branch A or B creates a node, bind fills/strokes/padding/cornerRadius/width/height from the first variant too if they're absent at the top level (never from a `states` override — only the variant's own base values).
 
 In Branches A and B, **don't create a text child node** — even when `textColor` is known, don't apply it to the component itself; treat it as reference info in the property list only. Two reasons: (1) the text content itself is out of scope, so an empty text node wouldn't display anything meaningful, and (2) placing an empty text placeholder inside Auto Layout risks reproducing the "FILL sizing collapses" bug already confirmed live in this session.
 
