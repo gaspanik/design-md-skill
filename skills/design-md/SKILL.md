@@ -4,14 +4,15 @@ description: >-
   Bidirectional sync between DESIGN.md and a Figma file, conforming to the
   Google design.md spec. Import mode reads a DESIGN.md — whether generated
   by this skill or written by hand/another tool — and creates matching
-  Figma variable collections and text styles; components stay as
-  reference info (root-level token references) in the frontmatter
-  data, never as fabricated Figma nodes. Export mode reads a file's
-  existing variables, text styles, and components and generates a
-  DESIGN.md from them. Base tokens sync fully; components sync as
-  reference info only. Interaction states and full variant matrices
-  are out of scope; use a tool built for that alongside this skill.
-  Every write step re-verifies its own output
+  Figma variable collections and text styles; components become real
+  Figma nodes only when width and height are both tokenized (buttons,
+  chips, pills), otherwise they stay as reference info in the
+  frontmatter data rather than a fabricated shell. Export mode reads
+  a file's existing variables, text styles, and components and
+  generates a DESIGN.md from them. Base tokens sync fully.
+  Interaction states and full variant matrices are out of scope; use
+  a tool built for that alongside this skill. Every write step
+  re-verifies its own output
   (bound variables, actual values, counts) rather than trusting the API
   call alone. Part of KMRVID Figma Skills, a 21-skill bundle covering
   AI-slop-resistant page generation, multi-layout exploration, layer
@@ -21,7 +22,7 @@ description: >-
 
 # DESIGN.md Sync
 
-**Ver:** ver.202609101723
+**Ver:** ver.202609101736
 
 A skill that syncs DESIGN.md and a Figma file bidirectionally. Conforms to the Google design.md spec (https://github.com/google-labs-code/design.md/blob/main/docs/spec.md).
 
@@ -43,7 +44,12 @@ This skill syncs:
 
 **Components are reference info, not a reconstruction.** Each `components` entry is a record of which tokens a component uses — nothing more. Beyond the 7 fields above — child layer structure, Auto Layout, the text content itself, images/slots, fills/placement of any child other than the one text node, and component properties — are all out of scope.
 
-**Import does not create components as Figma nodes.** Even when width/height are present, child layer structure, the text content itself, and images are still out of scope, so building a node still only produces an empty shell, not the original card/button's actual appearance. And most complex components (e.g. product cards) won't have width/height bound to a variable at all, so they'd just be same-size empty boxes with no way to tell them apart. So `components` data lives only in the DESIGN.md frontmatter; if Import builds a preview page, components appear there as reference-info text (name + property list + token references), never as a Figma node with real substance.
+**Whether Import creates a component as a Figma node branches on whether `width` and `height` are both present.**
+
+- **Both `width` and `height` present (common for simple components like buttons, chips, pills):** it's fine to create an actual Figma component. The 6 fields — fills/strokes/padding/cornerRadius/width/height — describe the appearance almost completely, so this is a legitimate reconstruction, not fabrication. Text content is still out of scope, though, so **don't create a text child node** (even when `textColor` is known, apply it only to the property list as reference info, not to the component itself)
+- **Either or both missing (common for composite components like cards, rows):** don't create a Figma node, as before. Child layer structure, Auto Layout, text content, and images remain out of scope, so building a node without even size data would just produce same-size empty boxes that don't add up to a useful artifact
+
+Either way, `components` data lives in the DESIGN.md frontmatter. If Import builds a preview page, a component with both width and height gets an instance of the actual created node (same treatment as Export's preview); one without gets reference-info text only (name + property list + token references), never a Figma node.
 
 It deliberately does **not** attempt to capture:
 - Interaction states (hover, active, focus, disabled) or their color/style overrides
@@ -63,7 +69,7 @@ When the skill starts, check whether a DESIGN.md file has been attached.
 
 **If nothing is attached:** present the following via `ask_user_question`:
 
-- **Import (DESIGN.md → Figma)** — read DESIGN.md and create variables and styles (components stay as reference info, not Figma nodes — see Scope)
+- **Import (DESIGN.md → Figma)** — read DESIGN.md and create variables and styles (components are created as Figma nodes only when width and height are both present; otherwise they stay as reference info — see Scope)
 - **Export (Figma → DESIGN.md)** — generate DESIGN.md from the current file's variables and styles
 
 If Import is selected, send the message "Please attach your DESIGN.md file to the chat." and wait for the file to be attached.
@@ -189,11 +195,65 @@ Create any Text Style that uses a font listed in `failed` with the `fallback` (I
 
 **Import Step 3-verify (mandatory, do not skip):** `style.setBoundVariable()` not throwing an error is not proof that the intended value was actually bound (a bug where fontSize collapses to an unintended value while still reporting as "bound" has been confirmed in live testing of other skills). Re-fetch every Text Style you created and check, one by one, whether `style.boundVariables.fontSize` / `.lineHeight` point to the intended variable, and whether `style.fontSize`'s actual value matches the size expected from the frontmatter. Fix any mismatch on the spot. Report the result with explicit counts, in the form "Confirmed fontSize binding on N of N Text Styles / values matched on N of N".
 
-## Import Step 4 — Review component reference info
+## Import Step 4 — Create components (only when width/height are both present)
 
-Read the frontmatter's `components` definitions and take note of them. **Do not create any component nodes in Figma** (see "Scope" above). Why: `components` only records fills/textColor/padding/border/cornerRadius/width/height (width/height only when variable-bound), never children. Most complex components (e.g. product cards) won't have width/height bound at all, so building a node from just this data produces identically-sized empty boxes for components that are actually quite different -- and even for the simple atoms that do have width/height, child layer structure and text content are still out of scope, so the node would still be an empty shell.
+Read the frontmatter's `components` definitions. For each entry, branch on whether `width` and `height` are both present (see "Scope" above).
 
-This step only does two things:
+### Branch A: both width and height present — create a Figma component
+
+The 6 fields fills/strokes/padding/cornerRadius/width/height describe the appearance almost completely (buttons, chips, pills, etc.), so create an actual Figma component. **Don't create a text child node** — even when `textColor` is known, don't apply it to the component itself; treat it as reference info in the property list only. Two reasons: (1) the text content itself is out of scope, so an empty text node wouldn't display anything meaningful, and (2) placing an empty text placeholder inside Auto Layout risks reproducing the "FILL sizing collapses" bug already confirmed live in this session.
+
+#### Variable-binding patterns
+
+**Note (if a Style is combined with this in the future):** this step assumes the pattern of binding variables directly to nodes. If you later change this to create and apply a local Paint Style for the same property, bind the variable on the Style side (`style.setBoundVariable`) instead of the node side — on a node with a Style applied, the Style's value takes precedence and the node-level binding stops affecting the visual result (a silent bug where `node.boundVariables` looks bound but is actually inert).
+
+To bind a color variable to fills / strokes, use `setBoundVariableForPaint`:
+
+    const basePaint = { type: 'SOLID', color: { r: 0, g: 0, b: 0 } };
+    const boundPaint = figma.variables.setBoundVariableForPaint(basePaint, 'color', colorVar);
+    node.fills = [boundPaint];
+
+For layout-related properties like padding and corner radius, use `setBoundVariable`:
+
+    node.setBoundVariable('paddingTop', spacingVar);
+    node.setBoundVariable('topLeftRadius', roundedVar);
+
+#### Resolving token references
+
+Resolve token references such as `"{colors.primary}"` inside component definitions to the corresponding Figma variable and bind it.
+
+#### [Important] Order of resize() and sizingMode
+
+`resize()` resets both `primaryAxisSizingMode` and `counterAxisSizingMode` to `'FIXED'`. Always call resize() first, then set sizingMode afterward:
+
+    // ✗ Wrong — resize() overwrites sizingMode
+    frame.primaryAxisSizingMode = 'AUTO';
+    frame.resize(300, 10);
+
+    // ✓ Correct — set sizingMode after resize()
+    frame.resize(300, 10);
+    frame.counterAxisSizingMode = 'FIXED';
+    frame.primaryAxisSizingMode = 'AUTO';
+
+#### Binding width and height
+
+Resize to the token's actual value first, then bind with `setBoundVariable` (order matters, same reason as resize() above):
+
+    component.resize(resolvedWidthPx, resolvedHeightPx);
+    component.setBoundVariable('width', widthVar);
+    component.setBoundVariable('height', heightVar);
+
+**Import Step 4-verify (mandatory, do not skip):** After the variable binding above, re-fetch every component you created and mechanically check the following, reporting counts. Judge by the value actually reflected on the node — not by whether the call was made:
+- Whether the variables specified for `fills`/`strokes`/`padding`/`cornerRadius`/`width`/`height` are actually reflected in `boundVariables`
+- That no text child node was created (verify none was added by mistake)
+
+Report the result with explicit counts, in the form "Confirmed variable binding on N of N components". Fix any mismatch on the spot before moving on.
+
+### Branch B: either or both of width/height missing — reference info only
+
+**Do not create any component nodes in Figma.** Why: child layer structure, Auto Layout, text content, and images remain out of scope, and building a node without even size data would produce same-size empty boxes for components that are actually quite different, and would require inventing information that doesn't exist — fabrication.
+
+This case only does two things:
 - Confirm that each component definition's token references (e.g. `"{colors.primary}"`) resolve correctly to the variables created in Step 2 (call out any reference that doesn't resolve in the Step 6 completion report)
 - Hold on to the component names and property lists for use in Step 5 (preview page, if created) and Step 6 (completion report)
 
@@ -213,7 +273,7 @@ If creating it, use `create_design` to generate a 1280px-wide document page cont
 3. **Typography section** — show every Text Style created, grouped by category (Heading / Body / Caption). Each row shows the style name/spec on the left and sample text on the right. **The sample text must have the actual Text Style applied via `textNode.textStyleId = style.id`.** Don't approximate the font/weight/size independently by eye (`create_design` has a known bug of substituting an unrelated "similar-looking" font). After applying, verify each sample text's `textStyleId` points to the intended Text Style; report as "Confirmed application on N of N text styles"
 4. **Spacing section** — visualize spacing tokens as horizontal bar lengths (with value labels)
 5. **Rounded section** (if applicable) — visualize corner-radius tokens with preview rectangles
-6. **Components section (text only in Import mode)** — Import Step 4 doesn't create any Figma node, so place no visual placeholder or instance. For each component, lay out its name, property list (only the keys that actually exist among `backgroundColor`/`textColor`/`padding`/`border`/`rounded`/`width`/`height`), and token references as a text-only card. **Only list properties that actually exist in that component's `components` definition.** Don't add `spacing` (gap) or anything else not in the `components` definition — writing information that isn't there makes it look like DESIGN.md captured something it didn't. (Export mode's preview differs from this — it may place a real instance of the actual component, since it exists in the live file; see Export Step 2.5)
+6. **Components section (treatment varies per component in Import mode)** — For a component Import Step 4 actually created (both width and height present), place an instance of that component at the top of the card, with its name, property list, and token references beneath it (same treatment as Export's preview). For a component with no node created (width/height missing), place no visual placeholder or instance — just its name, property list, and token references as a text-only card. **Only list properties that actually exist in that component's `components` definition.** Don't add `spacing` (gap) or anything else not in the `components` definition — writing information that isn't there makes it look like DESIGN.md captured something it didn't
 
 Include in the preview only the sections that exist in the frontmatter (e.g. omit the Rounded section if `rounded` isn't defined). The Markdown body (Overview / Do's and Don'ts, etc.) is out of scope for the preview — that's prose content that should be referenced from the DESIGN.md file itself.
 
@@ -222,7 +282,7 @@ Include in the preview only the sections that exist in the frontmatter (e.g. omi
 Include the following in `instructions`:
 - The system name and the page's purpose ("{name} Design System — DESIGN.md Preview")
 - The content of each section (list the specific token values and style names extracted from the frontmatter)
-- State explicitly that the Components section is text-only — no instance, placeholder rectangle, or other visual element; just each component's name, property list, and token references laid out as text cards
+- State explicitly that the Components section's treatment varies per component — a component that got an actual node (width and height both present) gets an instance placed first, while one that didn't (width/height missing) is text-only, with no instance or placeholder rectangle
 - State explicitly that the property list must only include keys that actually exist in that component's `components` definition. For a component whose definition has no `width`/`height`, explicitly prohibit reading them (or `spacing`/gap) from the live Figma file and adding them to the list — `create_design` has access to the live file, so without this constraint it will fill gaps on its own
 - **State explicitly that each Colors swatch must be bound to its actual Figma variable (not chosen by visual similarity), and that opacity must match that variable's value** — two colors sharing the same HEX but different opacity must not be conflated
 - **State explicitly that each Typography sample text must have the actual created Text Style applied, not an independently-chosen approximate font/weight/size**
@@ -235,7 +295,7 @@ Include in the preview only the sections that exist in the frontmatter (e.g. omi
 
 When an auto-layout frame is appended (appendChild) into another auto-layout frame, the child's layoutSizingVertical/Horizontal automatically becomes "FIXED", locking it to its size at that moment (either the initial post-resize value, or the shrunk measured value after a FILL child loses its parent space to reference).
 
-The preview page's structure has multiple levels — "page → section frame → card → the card's text elements" — and appendChild happens at each level (adding a section to the page, adding a card to a section, placing a text element in a card). **Reverting just one level back to HUG does not fix the deeper nesting — it stays collapsed** — reproduced live as a card row collapsing to its minimum size.
+The preview page's structure has multiple levels — "page → section frame → card → elements inside the card (text, or an instance for a component with width/height)" — and appendChild happens at each level (adding a section to the page, adding a card to a section, placing text or an instance in a card). **Reverting just one level back to HUG does not fix the deeper nesting (e.g. a FILL-set element inside an instance) — it stays collapsed** — reproduced live as a card row collapsing to its minimum size.
 
 **Required fix:** immediately after each appendChild at every level, apply the following recursively.
 
@@ -265,6 +325,10 @@ The preview page's structure has multiple levels — "page → section frame →
     sectionFrame.appendChild(cardFrame);
     fixFillCollapse(sectionFrame);
 
+    // (For a component with width/height) right after placing the instance in the card
+    cardFrame.appendChild(instance);
+    fixFillCollapse(cardFrame);
+
 `node.height`/`.width` still return the correct pre-collapse measured values from the Figma Plugin API right after appendChild, so a separate pre-recording pass isn't necessary — but the call must happen immediately after each appendChild, within the same pass (deferring it can make the correct value unreadable).
 
 ## Import Step 6 — Completion report
@@ -276,7 +340,7 @@ Report the creation results together with each verify step's verification result
 - Whether there was a naming-convention conflict with existing tokens, and the chosen resolution (if Import Step 2 triggered a confirmation)
 - Number of text styles (including Step 3-verify's fontSize binding confirmation / value-match counts)
 - Whether a font substitution occurred (if Import Step 3 triggered a fallback, the original font → substitute font and affected styles)
-- Number of component reference-info entries confirmed in Step 4 (state explicitly that they were not created as Figma nodes)
+- Component breakdown (of the total `components` entries, how many had both width/height and were created as Figma nodes, with Step 4-verify's counts, vs. how many stayed reference-info only)
 - Number of document frames (if created)
 - Whether a preview page was created (attach a node link if it was)
 
