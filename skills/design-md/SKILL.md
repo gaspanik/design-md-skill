@@ -6,11 +6,12 @@ description: >-
   by this skill or written by hand/another tool — and creates matching
   Figma variable collections, text styles, and components. Export mode
   reads a file's existing variables, text styles, and components and
-  generates a DESIGN.md from them. Scope is intentionally limited to base
-  design tokens (colors, typography, spacing, corner radius) and each
-  component's default visual state — hover/active/focus/disabled states
-  and full variant matrices are out of scope; use a tool built for that
-  alongside this skill. Every write step re-verifies its own output
+  generates a DESIGN.md from them. Base tokens (colors, typography,
+  spacing, corner radius) sync fully; components sync as reference info
+  only — root-level token references, not layer structure, text content,
+  or images. Interaction states and full variant matrices are out of
+  scope; use a tool built for that alongside this skill. Every write
+  step re-verifies its own output
   (bound variables, actual values, counts) rather than trusting the API
   call alone. Part of KMRVID Figma Skills, a 21-skill bundle covering
   AI-slop-resistant page generation, multi-layout exploration, layer
@@ -20,7 +21,7 @@ description: >-
 
 # DESIGN.md Sync
 
-**Ver:** ver.202608281612
+**Ver:** ver.202609101543
 
 A skill that syncs DESIGN.md and a Figma file bidirectionally. Conforms to the Google design.md spec (https://github.com/google-labs-code/design.md/blob/main/docs/spec.md).
 
@@ -30,16 +31,19 @@ A skill that syncs DESIGN.md and a Figma file bidirectionally. Conforms to the G
 
 ## Scope
 
-**Base tokens and default component states only — not a full design-system state matrix.**
+**Full sync for base tokens; components are reference info only — not a full design-system state matrix, and not a component structure interchange format.**
 
 This skill syncs:
-- Base design tokens: colors, typography, spacing, corner radius
-- Each component's default/base visual appearance (fills, text, padding, border, corner radius)
+- Base design tokens: colors, typography, spacing, corner radius (round-trips exactly, value for value)
+- Each component's **reference info**: token references for the root node's own `fills`/`text` (text child node color)/`padding`/`border`/`corner radius` only
+
+**Components are reference info, not a reconstruction.** Each `components` entry is a record of which tokens a component uses — nothing more. Child layer structure, Auto Layout, sizing, text content, images/slots, per-child fills and placement, and component properties are all out of scope. On Import, the component this skill creates is an empty shell — root-level properties bound to tokens — and does not reproduce the original card/button/etc.'s actual appearance.
 
 It deliberately does **not** attempt to capture:
 - Interaction states (hover, active, focus, disabled) or their color/style overrides
 - Component variant sets beyond what's already present as native Figma variants
 - Anything with no equivalent field in Figma's variable/style/component model (e.g. CSS `text-transform`, letter-tracking values, custom cursors)
+- A component's child layer structure, Auto Layout, sizing, text content, images/slots, or component properties (as above, only root-level token references are in scope)
 
 If a source DESIGN.md describes a component category that doesn't fit this model at all (for example, a shape that conflicts with the rest of the system's token rules, such as a circular element in an otherwise zero-corner-radius system), Import may reasonably skip it — this is expected, not a bug, and gets called out in the Step 6 completion report rather than silently dropped.
 
@@ -181,7 +185,7 @@ Create any Text Style that uses a font listed in `failed` with the `fallback` (I
 
 ## Import Step 4 — Create components
 
-Create local components based on the frontmatter's `components` definitions.
+Create local components based on the frontmatter's `components` definitions. **What gets created is an empty shell — only root-level properties (fills/text/padding/border/corner radius) bound to tokens. It does not reproduce the original file's actual card/button/etc. structure** (child layers, Auto Layout, text content, images) — see "Scope" above.
 
 ### Variable-binding patterns
 
@@ -260,7 +264,7 @@ If creating it, use `create_design` to generate a 1280px-wide document page cont
 3. **Typography section** — show every Text Style created, grouped by category (Heading / Body / Caption). Each row shows the style name/spec on the left and sample text on the right
 4. **Spacing section** — visualize spacing tokens as horizontal bar lengths (with value labels)
 5. **Rounded section** (if applicable) — visualize corner-radius tokens with preview rectangles
-6. **Components section** — place a real preview at the top of each component card (a component instance; if it exceeds the card width, a screenshot image per "Handling components wider than the card" below), and show the component name, property list, and token references beneath it. Don't settle for just a property-list table — always place the real preview first
+6. **Components section** — place a token-bound placeholder at the top of each card (an instance of the empty-shell component this skill created; if it exceeds the card width, a screenshot image per "Handling components wider than the card" below), and show the component name, property list, and token references beneath it. **This placeholder does not reproduce the original file's actual card/button/etc. appearance** (see "Scope" above) — avoid labels like "real preview" or "what the component looks like" that could mislead; call it a "token preview" instead
 
 Include in the preview only the sections that exist in the frontmatter (e.g. omit the Rounded section if `rounded` isn't defined). The Markdown body (Overview / Do's and Don'ts, etc.) is out of scope for the preview — that's prose content that should be referenced from the DESIGN.md file itself.
 
@@ -269,7 +273,7 @@ Include in the preview only the sections that exist in the frontmatter (e.g. omi
 Include the following in `instructions`:
 - The system name and the page's purpose ("{name} Design System — DESIGN.md Preview")
 - The content of each section (list the specific token values and style names extracted from the frontmatter)
-- State explicitly that the Components section places the real component (an instance, or a screenshot if it's too wide) at the top of each card, with the property list attached below it — don't settle for a metadata table alone
+- State explicitly that the Components section places a token-bound placeholder (an instance, or a screenshot if it's too wide) at the top of each card, with the property list attached below it — don't settle for a metadata table alone. Also state that this placeholder does not reproduce the original file's actual appearance
 - The overall tone direction ("minimal, editorial, generous whitespace")
 - Instruction that the page itself should use the file's variables and Text Styles
 
@@ -410,13 +414,15 @@ Extract from each style:
     const components = figma.currentPage.findAll(n => n.type === 'COMPONENT');
     const componentSets = figma.currentPage.findAll(n => n.type === 'COMPONENT_SET');
 
-Read from each component:
+**Only root-node-level properties are collected (reference info).** Don't descend into child layers or Auto Layout structure:
 
 - `fills` → `backgroundColor` (if variable-bound, output as `"{colors.xxx}"`)
 - A text child node's `fills` → `textColor`
 - `padding*` → `padding`
 - `cornerRadius` → `rounded` (a token reference if variable-bound)
 - `strokes` → `borderColor`
+
+If none of these can be read (the component has no such properties at the root level), exclude it from collection rather than emitting an empty `components` entry.
 
 For a component set, extract properties from the variant names, and record derived states like hover as diffs only.
 
@@ -462,6 +468,7 @@ If the collected variables, text styles, and components all come to 0, abort DES
     spacing:
       xs: <value>px
       ...
+    # components: root-level token references only. Does not include child layer structure, text content, or images (reference info)
     components:
       <component definitions>
     ---
@@ -490,6 +497,8 @@ If the collected variables, text styles, and components all come to 0, abort DES
 
 Generate the body by objectively inferring from the frontmatter's token values. Sections with insufficient information may be omitted.
 
+**Writing the Components section:** `components` records token references only — it's not a description of layout or structure. Don't assert layout/structure ("the Card component uses a two-column layout"); stick to "which tokens it uses" and color/spacing/corner-radius guidance.
+
 ### Consistency check (mandatory, do not skip)
 
 Don't stop at "I checked it" — mechanically count the following and report the counts to yourself. A visual-only self-report (e.g. "no contradictions," "consistent," without counts) is not acceptable:
@@ -511,7 +520,7 @@ If creating it, generate the preview page using `create_design`. The structure f
 
 - The preview page's content treats the frontmatter values generated in Export Step 2 as authoritative (the values written out to DESIGN.md, not the file's live variable values)
 - Style the page using the file's existing variables and Text Styles as-is (don't create new ones)
-- In the Components section, show the name, properties, and token references of the components detected during Export
+- In the Components section, show the name, properties, and token references of the components detected during Export (label it as reference info, not a reproduction of the original)
 
 ## Export Step 3 — Output
 
