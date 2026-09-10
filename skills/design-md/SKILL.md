@@ -20,7 +20,7 @@ description: >-
 
 # DESIGN.md Sync
 
-**Ver:** ver.202609101854
+**Ver:** ver.202609101928
 
 A skill that syncs DESIGN.md and a Figma file bidirectionally. Conforms to the Google design.md spec (https://github.com/google-labs-code/design.md/blob/main/docs/spec.md).
 
@@ -200,11 +200,23 @@ Create any Text Style that uses a font listed in `failed` with the `fallback` (I
 
 Read the frontmatter's `components` definitions. For each entry, branch on whether its size can be determined without inventing a value (see "Scope" above):
 
-- `width` and `height` both present → **Branch A (fixed size)**
-- `width`/`height` absent, but `padding` has at least one non-zero value → **Branch B (padding-derived size)**
-- Neither → **Branch C (reference info only, no node)**
+- `width` and `height` both present → **Branch A (fixed size)**. No ambiguity, so this is automatic.
+- `width`/`height` aren't both present, but `padding` has at least one non-zero value → **ask the user which of Branch B or Branch C applies** (see below)
+- `padding` is all-zero or absent → **Branch C (reference info only, no node)**. No ambiguity, so this is automatic.
+
+**[Important — why this stopped being an automatic decision]** Earlier attempts tried to use signals like `variants` (real Figma Component Variants) or `states` (hover/pressed/etc.) to tell apart "a simple component fully described by fill/border/padding, like a button/chip/pill" from "a composite layout like Header/Footer." Neither held up: a container like Header/Footer can carry `variants` too, and cards commonly define `states` (e.g., a color change on hover) without being simple padding-sized shapes. Google's design.md spec has no field for sizing mode (Hug vs. Fixed) or child-content complexity (confirmed against the spec doc), so there's no reliable signal in the DESIGN.md data itself to settle this mechanically. Guessing anyway would just be a different flavor of fabrication, so this one judgment call goes to the user instead.
 
 **If width/height/padding aren't at the entry's top level, also check the first variant under `variants`.** A component with variants (buttons, etc.) may not have flat top-level properties like Header/Footer do — everything can be nested under `variants.<name>` instead (confirmed live: checking only the top level misclassified such a component into Branch C). Since size rarely differs between style variants, it's fine to use the first variant's values as representative. When Branch A or B creates a node, bind fills/strokes/padding/cornerRadius/width/height from the first variant too if they're absent at the top level (never from a `states` override — only the variant's own base values).
+
+### Confirming the Branch B vs. Branch C call (`ask_user_question`, mandatory)
+
+Collect every entry that lacks both width and height but has at least one non-zero padding value, and ask the user about it (batched or one at a time). Example prompt:
+
+> Is "<name>" a simple component whose appearance is essentially just fill/border/padding, like a button?
+> - **Yes** — create a Figma component sized from padding (Branch B)
+> - **No** — keep it as reference info only (Branch C). Pick this for layout containers like Header/Footer, or anything whose appearance depends on image/multi-text content
+
+Entries answered "Yes" go to Branch B; entries answered "No" go to Branch C.
 
 In Branches A and B, **don't create a text child node** — even when `textColor` is known, don't apply it to the component itself; treat it as reference info in the property list only. Two reasons: (1) the text content itself is out of scope, so an empty text node wouldn't display anything meaningful, and (2) placing an empty text placeholder inside Auto Layout risks reproducing the "FILL sizing collapses" bug already confirmed live in this session.
 
@@ -256,7 +268,7 @@ Resize to the token's actual value first, then bind with `setBoundVariable` (ord
 
 Report the result with explicit counts, in the form "Confirmed variable binding on N of N components". Fix any mismatch on the spot before moving on.
 
-### Branch B: width/height absent, but padding has a non-zero value — create at a padding-derived size
+### Branch B: entries answered "Yes" above — create at a padding-derived size
 
 Common for real-world buttons using Auto Layout's "Hug contents" — the size derives from content + padding rather than being fixed.
 
@@ -275,9 +287,9 @@ Common for real-world buttons using Auto Layout's "Hug contents" — the size de
 
 Report the result with explicit counts, in the form "Confirmed variable binding on N of N components / size calculation confirmed on N of N".
 
-### Branch C: neither width/height nor non-zero padding — reference info only
+### Branch C: neither width/height nor non-zero padding, or the user answered "No" above — reference info only
 
-**Do not create any component nodes in Figma.** Why: child layer structure, Auto Layout, text content, and images remain out of scope, and with nothing to determine even a minimal size (no fixed size, no padding to compute one from), a node would just be a same-size empty box indistinguishable from other components' boxes.
+**Do not create any component nodes in Figma.** Why: child layer structure, Auto Layout, text content, and images remain out of scope, and with nothing to determine even a minimal size (no fixed size, no padding to meaningfully compute one from) — or with the user having judged that padding alone wouldn't represent it faithfully — a node would just be a same-size empty box indistinguishable from other components' boxes.
 
 This case only does two things:
 - Confirm that each component definition's token references (e.g. `"{colors.primary}"`) resolve correctly to the variables created in Step 2 (call out any reference that doesn't resolve in the Step 6 completion report)
