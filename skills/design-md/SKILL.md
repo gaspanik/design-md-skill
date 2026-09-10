@@ -21,7 +21,7 @@ description: >-
 
 # DESIGN.md Sync
 
-**Ver:** ver.202609101715
+**Ver:** ver.202609101723
 
 A skill that syncs DESIGN.md and a Figma file bidirectionally. Conforms to the Google design.md spec (https://github.com/google-labs-code/design.md/blob/main/docs/spec.md).
 
@@ -35,13 +35,15 @@ A skill that syncs DESIGN.md and a Figma file bidirectionally. Conforms to the G
 
 This skill syncs:
 - Base design tokens: colors, typography, spacing, corner radius (round-trips exactly, value for value)
-- Each component's **reference info**: only these 5 fields — `fills` (background), `strokes` (border), `padding`, `corner radius` (the component's own root node properties), and **one direct text child node's `fills`** (as `textColor` — the sole "read a child" exception)
+- Each component's **reference info**: only these 7 fields — `fills` (background), `strokes` (border), `padding`, `corner radius`, `width`, `height` (the component's own root node properties), and **one direct text child node's `fills`** (as `textColor` — the sole "read a child" exception)
 
-**If even one of these 5 fields is readable, include the component.** `textColor` is a first-class collection target on the same footing as the root-level properties — don't treat it as "a child layer" and exclude it. Many components have no fill of their own and are defined entirely by their text color; excluding `textColor` drops essentially every text-driven component (cards, rows, list items) from collection entirely.
+**`width`/`height` are collected only when variable-bound (never a raw measured pixel value).** The Google design.md spec explicitly allows `size`/`width`/`height` as component token properties, and simple components like buttons, chips, and pills often do have their size tokenized. But writing an unbound size value would be fabrication just like everything else here, so only emit `width`/`height` when `node.boundVariables.width`/`.height` exists — otherwise omit those keys entirely for that component (the other 5 fields still apply normally).
 
-**Components are reference info, not a reconstruction.** Each `components` entry is a record of which tokens a component uses — nothing more. Beyond the 5 fields above — child layer structure, Auto Layout, sizing, the text content itself, images/slots, fills/placement of any child other than the one text node, and component properties — are all out of scope.
+**If even one of these 7 fields is readable, include the component.** `textColor` is a first-class collection target on the same footing as the root-level properties — don't treat it as "a child layer" and exclude it. Many components have no fill of their own and are defined entirely by their text color; excluding `textColor` drops essentially every text-driven component (cards, rows, list items) from collection entirely.
 
-**Import does not create components as Figma nodes.** Building an empty shell from just the 5 fields above has no width, height, or content, so components with different actual content end up as identical-looking empty boxes -- and since width/height aren't part of the `components` definition at all, inventing a size for the shell is itself fabrication. So `components` data lives only in the DESIGN.md frontmatter; if Import builds a preview page, components appear there as reference-info text (name + property list + token references), never as a Figma node with real substance.
+**Components are reference info, not a reconstruction.** Each `components` entry is a record of which tokens a component uses — nothing more. Beyond the 7 fields above — child layer structure, Auto Layout, the text content itself, images/slots, fills/placement of any child other than the one text node, and component properties — are all out of scope.
+
+**Import does not create components as Figma nodes.** Even when width/height are present, child layer structure, the text content itself, and images are still out of scope, so building a node still only produces an empty shell, not the original card/button's actual appearance. And most complex components (e.g. product cards) won't have width/height bound to a variable at all, so they'd just be same-size empty boxes with no way to tell them apart. So `components` data lives only in the DESIGN.md frontmatter; if Import builds a preview page, components appear there as reference-info text (name + property list + token references), never as a Figma node with real substance.
 
 It deliberately does **not** attempt to capture:
 - Interaction states (hover, active, focus, disabled) or their color/style overrides
@@ -189,7 +191,7 @@ Create any Text Style that uses a font listed in `failed` with the `fallback` (I
 
 ## Import Step 4 — Review component reference info
 
-Read the frontmatter's `components` definitions and take note of them. **Do not create any component nodes in Figma** (see "Scope" above). Why: `components` only records fills/textColor/padding/border/cornerRadius -- no width, height, or children. Building a node from just that produces identically-sized empty boxes for components that are actually quite different, and since width/height aren't part of the `components` definition at all, inventing a size for the shell would itself be fabrication.
+Read the frontmatter's `components` definitions and take note of them. **Do not create any component nodes in Figma** (see "Scope" above). Why: `components` only records fills/textColor/padding/border/cornerRadius/width/height (width/height only when variable-bound), never children. Most complex components (e.g. product cards) won't have width/height bound at all, so building a node from just this data produces identically-sized empty boxes for components that are actually quite different -- and even for the simple atoms that do have width/height, child layer structure and text content are still out of scope, so the node would still be an empty shell.
 
 This step only does two things:
 - Confirm that each component definition's token references (e.g. `"{colors.primary}"`) resolve correctly to the variables created in Step 2 (call out any reference that doesn't resolve in the Step 6 completion report)
@@ -211,7 +213,7 @@ If creating it, use `create_design` to generate a 1280px-wide document page cont
 3. **Typography section** — show every Text Style created, grouped by category (Heading / Body / Caption). Each row shows the style name/spec on the left and sample text on the right. **The sample text must have the actual Text Style applied via `textNode.textStyleId = style.id`.** Don't approximate the font/weight/size independently by eye (`create_design` has a known bug of substituting an unrelated "similar-looking" font). After applying, verify each sample text's `textStyleId` points to the intended Text Style; report as "Confirmed application on N of N text styles"
 4. **Spacing section** — visualize spacing tokens as horizontal bar lengths (with value labels)
 5. **Rounded section** (if applicable) — visualize corner-radius tokens with preview rectangles
-6. **Components section (text only in Import mode)** — Import Step 4 doesn't create any Figma node, so place no visual placeholder or instance. For each component, lay out its name, property list (only the keys that actually exist among `backgroundColor`/`textColor`/`padding`/`border`/`rounded`), and token references as a text-only card. **Only list properties that actually exist in that component's `components` definition.** Don't add `width`, `height`, `spacing` (gap), or anything else not in the `components` definition — writing information that isn't there makes it look like DESIGN.md captured something it didn't. (Export mode's preview differs from this — it may place a real instance of the actual component, since it exists in the live file; see Export Step 2.5)
+6. **Components section (text only in Import mode)** — Import Step 4 doesn't create any Figma node, so place no visual placeholder or instance. For each component, lay out its name, property list (only the keys that actually exist among `backgroundColor`/`textColor`/`padding`/`border`/`rounded`/`width`/`height`), and token references as a text-only card. **Only list properties that actually exist in that component's `components` definition.** Don't add `spacing` (gap) or anything else not in the `components` definition — writing information that isn't there makes it look like DESIGN.md captured something it didn't. (Export mode's preview differs from this — it may place a real instance of the actual component, since it exists in the live file; see Export Step 2.5)
 
 Include in the preview only the sections that exist in the frontmatter (e.g. omit the Rounded section if `rounded` isn't defined). The Markdown body (Overview / Do's and Don'ts, etc.) is out of scope for the preview — that's prose content that should be referenced from the DESIGN.md file itself.
 
@@ -221,7 +223,7 @@ Include the following in `instructions`:
 - The system name and the page's purpose ("{name} Design System — DESIGN.md Preview")
 - The content of each section (list the specific token values and style names extracted from the frontmatter)
 - State explicitly that the Components section is text-only — no instance, placeholder rectangle, or other visual element; just each component's name, property list, and token references laid out as text cards
-- State explicitly that the property list must only include keys that actually exist in that component's `components` definition. Explicitly prohibit reading additional properties (width/height/spacing/gap, etc.) from the live Figma file and adding them to the list — `create_design` has access to the live file, so without this constraint it will fill gaps on its own
+- State explicitly that the property list must only include keys that actually exist in that component's `components` definition. For a component whose definition has no `width`/`height`, explicitly prohibit reading them (or `spacing`/gap) from the live Figma file and adding them to the list — `create_design` has access to the live file, so without this constraint it will fill gaps on its own
 - **State explicitly that each Colors swatch must be bound to its actual Figma variable (not chosen by visual similarity), and that opacity must match that variable's value** — two colors sharing the same HEX but different opacity must not be conflated
 - **State explicitly that each Typography sample text must have the actual created Text Style applied, not an independently-chosen approximate font/weight/size**
 - The overall tone direction ("minimal, editorial, generous whitespace")
@@ -347,15 +349,19 @@ Extract from each style:
     const components = figma.currentPage.findAll(n => n.type === 'COMPONENT');
     const componentSets = figma.currentPage.findAll(n => n.type === 'COMPONENT_SET');
 
-**Only the following 5 fields are collected (reference info).** Don't descend into any other child layer or Auto Layout structure:
+**Only the following 7 fields are collected (reference info).** Don't descend into any other child layer or Auto Layout structure:
 
 - `fills` → `backgroundColor` (if variable-bound, output as `"{colors.xxx}"`)
 - **One direct text child node's `fills` → `textColor`** (the sole "read a child" exception — don't exclude this as "a child layer"; many components have no fill of their own and are defined entirely by text color, so excluding `textColor` causes mass collection drop-out)
 - `padding*` → `padding`
 - `cornerRadius` → `rounded` (a token reference if variable-bound)
 - `strokes` → `borderColor`
+- `boundVariables.width` if present → `width` (as a token reference; if not bound, omit the `width` key entirely for that component — never write a raw measured pixel value)
+- `boundVariables.height` if present → `height` (same rule)
 
-**Include the component if even one of these 5 fields is readable.** Only exclude it from collection (rather than emitting an empty `components` entry) if *all five* are unreadable — no fills/strokes/padding/cornerRadius on the root AND no direct text child. Before excluding, check each of the 5 individually — don't mistake "only `textColor` was found" for "nothing was found."
+The Google design.md spec explicitly allows `size`/`width`/`height` as component tokens, and simple components (buttons, chips, pills) often have their size tokenized. Complex composite components (product cards, rows) usually won't — that's expected, not a bug; just omit `width`/`height` for those.
+
+**Include the component if even one of these 7 fields is readable.** Only exclude it from collection (rather than emitting an empty `components` entry) if *all seven* are unreadable — no fills/strokes/padding/cornerRadius/width/height on the root AND no direct text child. Before excluding, check each of the 7 individually — don't mistake "only `textColor` was found" for "nothing was found."
 
 For a component set, extract properties from the variant names, and record derived states like hover as diffs only.
 
@@ -456,7 +462,7 @@ If creating it, generate the preview page using `create_design`. The Colors/Typo
 - The preview page's content treats the frontmatter values generated in Export Step 2 as authoritative (the values written out to DESIGN.md, not the file's live variable values)
 - Style the page using the file's existing variables and Text Styles as-is (don't create new ones)
 - **The Components section may place an instance of the real, exported component at the top of each card** (screenshot fallback via exportAsync if it's wider than the card). This is simply showing what genuinely exists in the file — not fabrication. The property list and token references beneath it should still be labeled as reference info, understood as a restatement of what's written to DESIGN.md
-- **The properties table may only list keys that actually appear in the generated DESIGN.md's `components` entry.** The original component being exported is real and lives in the live file, so `width`/`height`/`spacing` (gap) etc. can be read from it — but since those aren't part of the `components` definition, don't add them to the preview either. Adding a value to the preview alone that isn't in DESIGN.md implies DESIGN.md captured information it didn't
+- **The properties table may only list keys that actually appear in the generated DESIGN.md's `components` entry.** The original component being exported is real and lives in the live file, so `spacing` (gap) is always readable, and `width`/`height` are readable even when unbound — but any key not actually in the `components` definition (including an unbound width/height) stays out of the preview too. Adding a value to the preview alone that isn't in DESIGN.md implies DESIGN.md captured information it didn't
 
 ## Export Step 3 — Output
 
