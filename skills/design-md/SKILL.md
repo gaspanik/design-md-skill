@@ -4,14 +4,14 @@ description: >-
   Bidirectional sync between DESIGN.md and a Figma file, conforming to the
   Google design.md spec. Import mode reads a DESIGN.md — whether generated
   by this skill or written by hand/another tool — and creates matching
-  Figma variable collections, text styles, and components. Export mode
-  reads a file's existing variables, text styles, and components and
-  generates a DESIGN.md from them. Base tokens (colors, typography,
-  spacing, corner radius) sync fully; components sync as reference info
-  only — root-level token references, not layer structure, text content,
-  or images. Interaction states and full variant matrices are out of
-  scope; use a tool built for that alongside this skill. Every write
-  step re-verifies its own output
+  Figma variable collections and text styles; components stay as
+  reference info (root-level token references) in the frontmatter
+  data, never as fabricated Figma nodes. Export mode reads a file's
+  existing variables, text styles, and components and generates a
+  DESIGN.md from them. Base tokens sync fully; components sync as
+  reference info only. Interaction states and full variant matrices
+  are out of scope; use a tool built for that alongside this skill.
+  Every write step re-verifies its own output
   (bound variables, actual values, counts) rather than trusting the API
   call alone. Part of KMRVID Figma Skills, a 21-skill bundle covering
   AI-slop-resistant page generation, multi-layout exploration, layer
@@ -21,7 +21,7 @@ description: >-
 
 # DESIGN.md Sync
 
-**Ver:** ver.202609101621
+**Ver:** ver.202609101650
 
 A skill that syncs DESIGN.md and a Figma file bidirectionally. Conforms to the Google design.md spec (https://github.com/google-labs-code/design.md/blob/main/docs/spec.md).
 
@@ -39,7 +39,9 @@ This skill syncs:
 
 **If even one of these 5 fields is readable, include the component.** `textColor` is a first-class collection target on the same footing as the root-level properties — don't treat it as "a child layer" and exclude it. Many components have no fill of their own and are defined entirely by their text color; excluding `textColor` drops essentially every text-driven component (cards, rows, list items) from collection entirely.
 
-**Components are reference info, not a reconstruction.** Each `components` entry is a record of which tokens a component uses — nothing more. Beyond the 5 fields above — child layer structure, Auto Layout, sizing, the text content itself, images/slots, fills/placement of any child other than the one text node, and component properties — are all out of scope. On Import, the component this skill creates is an empty shell — the 5 fields above bound to tokens — and does not reproduce the original card/button/etc.'s actual appearance.
+**Components are reference info, not a reconstruction.** Each `components` entry is a record of which tokens a component uses — nothing more. Beyond the 5 fields above — child layer structure, Auto Layout, sizing, the text content itself, images/slots, fills/placement of any child other than the one text node, and component properties — are all out of scope.
+
+**Import does not create components as Figma nodes.** Building an empty shell from just the 5 fields above has no width, height, or content, so components with different actual content end up as identical-looking empty boxes -- and since width/height aren't part of the `components` definition at all, inventing a size for the shell is itself fabrication. So `components` data lives only in the DESIGN.md frontmatter; if Import builds a preview page, components appear there as reference-info text (name + property list + token references), never as a Figma node with real substance.
 
 It deliberately does **not** attempt to capture:
 - Interaction states (hover, active, focus, disabled) or their color/style overrides
@@ -59,7 +61,7 @@ When the skill starts, check whether a DESIGN.md file has been attached.
 
 **If nothing is attached:** present the following via `ask_user_question`:
 
-- **Import (DESIGN.md → Figma)** — read DESIGN.md and create variables, styles, and components
+- **Import (DESIGN.md → Figma)** — read DESIGN.md and create variables and styles (components stay as reference info, not Figma nodes — see Scope)
 - **Export (Figma → DESIGN.md)** — generate DESIGN.md from the current file's variables and styles
 
 If Import is selected, send the message "Please attach your DESIGN.md file to the chat." and wait for the file to be attached.
@@ -185,70 +187,13 @@ Create any Text Style that uses a font listed in `failed` with the `fallback` (I
 
 **Import Step 3-verify (mandatory, do not skip):** `style.setBoundVariable()` not throwing an error is not proof that the intended value was actually bound (a bug where fontSize collapses to an unintended value while still reporting as "bound" has been confirmed in live testing of other skills). Re-fetch every Text Style you created and check, one by one, whether `style.boundVariables.fontSize` / `.lineHeight` point to the intended variable, and whether `style.fontSize`'s actual value matches the size expected from the frontmatter. Fix any mismatch on the spot. Report the result with explicit counts, in the form "Confirmed fontSize binding on N of N Text Styles / values matched on N of N".
 
-## Import Step 4 — Create components
+## Import Step 4 — Review component reference info
 
-Create local components based on the frontmatter's `components` definitions. **What gets created is an empty shell — only root-level properties (fills/text/padding/border/corner radius) bound to tokens. It does not reproduce the original file's actual card/button/etc. structure** (child layers, Auto Layout, text content, images) — see "Scope" above.
+Read the frontmatter's `components` definitions and take note of them. **Do not create any component nodes in Figma** (see "Scope" above). Why: `components` only records fills/textColor/padding/border/cornerRadius -- no width, height, or children. Building a node from just that produces identically-sized empty boxes for components that are actually quite different, and since width/height aren't part of the `components` definition at all, inventing a size for the shell would itself be fabrication.
 
-### Variable-binding patterns
-
-**Note (if a Style is combined with this in the future):** this step assumes the pattern of binding variables directly to nodes. If you later change this to create and apply a local Paint Style for the same property, bind the variable on the Style side (`style.setBoundVariable`) instead of the node side — on a node with a Style applied, the Style's value takes precedence and the node-level binding stops affecting the visual result (a silent bug where `node.boundVariables` looks bound but is actually inert).
-
-To bind a color variable to fills / strokes, use `setBoundVariableForPaint`:
-
-    const basePaint = { type: 'SOLID', color: { r: 0, g: 0, b: 0 } };
-    const boundPaint = figma.variables.setBoundVariableForPaint(basePaint, 'color', colorVar);
-    node.fills = [boundPaint];
-
-For layout-related properties like padding and corner radius, use `setBoundVariable`:
-
-    node.setBoundVariable('paddingTop', spacingVar);
-    node.setBoundVariable('topLeftRadius', roundedVar);
-
-### Resolving token references
-
-Resolve token references such as `"{colors.primary}"` inside component definitions to the corresponding Figma variable and bind it.
-
-### Component properties
-
-When text is variable, add a text property with `addComponentProperty`:
-
-    const propKey = component.addComponentProperty('Label', 'TEXT', 'Default value');
-    textNode.componentPropertyReferences = { characters: propKey };
-
-### Variants (Component Set)
-
-When there are derived states like hover (e.g. `button-primary-hover`), clone the base component and merge them with `combineAsVariants`.
-
-### [Important] Order of resize() and sizingMode
-
-`resize()` resets both `primaryAxisSizingMode` and `counterAxisSizingMode` to `'FIXED'`. Always call resize() first, then set sizingMode afterward:
-
-    // ✗ Wrong — resize() overwrites sizingMode
-    frame.primaryAxisSizingMode = 'AUTO';
-    frame.resize(300, 10);
-
-    // ✓ Correct — set sizingMode after resize()
-    frame.resize(300, 10);
-    frame.counterAxisSizingMode = 'FIXED';
-    frame.primaryAxisSizingMode = 'AUTO';
-
-### Set FILL after appendChild
-
-    // ✗ Wrong
-    child.layoutSizingHorizontal = 'FILL';
-    parent.appendChild(child);
-
-    // ✓ Correct
-    parent.appendChild(child);
-    child.layoutSizingHorizontal = 'FILL';
-
-**Import Step 4-verify (mandatory, do not skip):** After performing the variable binding and sizingMode configuration above, re-fetch every component (and Component Set) you created and mechanically check the following, reporting counts. Judge by the value actually reflected on the node — not by whether the call was made:
-- Whether the color variables specified for `fills`/`strokes` are actually reflected in `boundVariables`
-- Whether the variables specified for padding/corner radius are reflected in `boundVariables`
-- Whether `primaryAxisSizingMode`/`counterAxisSizingMode`, set after `resize()`, still hold as intended (i.e. `resize()` wasn't called again afterward and reset them)
-- Whether a child set to FILL is actually filling the parent's space (and hasn't collapsed to a smaller size)
-
-Report the result with explicit counts, in the form "Confirmed color binding on N of N components / sizingMode as intended on N of N". Fix any mismatch on the spot before moving on.
+This step only does two things:
+- Confirm that each component definition's token references (e.g. `"{colors.primary}"`) resolve correctly to the variables created in Step 2 (call out any reference that doesn't resolve in the Step 6 completion report)
+- Hold on to the component names and property lists for use in Step 5 (preview page, if created) and Step 6 (completion report)
 
 ## Import Step 5 — Create a preview page (optional)
 
@@ -266,7 +211,7 @@ If creating it, use `create_design` to generate a 1280px-wide document page cont
 3. **Typography section** — show every Text Style created, grouped by category (Heading / Body / Caption). Each row shows the style name/spec on the left and sample text on the right
 4. **Spacing section** — visualize spacing tokens as horizontal bar lengths (with value labels)
 5. **Rounded section** (if applicable) — visualize corner-radius tokens with preview rectangles
-6. **Components section** — place a token-bound placeholder at the top of each card (an instance of the empty-shell component this skill created; if it exceeds the card width, a screenshot image per "Handling components wider than the card" below), and show the component name, property list, and token references beneath it. **This placeholder does not reproduce the original file's actual card/button/etc. appearance** (see "Scope" above) — avoid labels like "real preview" or "what the component looks like" that could mislead; call it a "token preview" instead. **Only list properties that actually exist in that component's `components` definition (fills/textColor/padding/border/rounded).** Don't mix in `width`, `height`, `spacing` (gap), or other properties that can be read from the live Figma file but aren't part of the `components` definition — listing a property that isn't in the definition makes it look like DESIGN.md captured information it didn't
+6. **Components section (text only in Import mode)** — Import Step 4 doesn't create any Figma node, so place no visual placeholder or instance. For each component, lay out its name, property list (only the keys that actually exist among `backgroundColor`/`textColor`/`padding`/`border`/`rounded`), and token references as a text-only card. **Only list properties that actually exist in that component's `components` definition.** Don't add `width`, `height`, `spacing` (gap), or anything else not in the `components` definition — writing information that isn't there makes it look like DESIGN.md captured something it didn't. (Export mode's preview differs from this — it may place a real instance of the actual component, since it exists in the live file; see Export Step 2.5)
 
 Include in the preview only the sections that exist in the frontmatter (e.g. omit the Rounded section if `rounded` isn't defined). The Markdown body (Overview / Do's and Don'ts, etc.) is out of scope for the preview — that's prose content that should be referenced from the DESIGN.md file itself.
 
@@ -275,7 +220,7 @@ Include in the preview only the sections that exist in the frontmatter (e.g. omi
 Include the following in `instructions`:
 - The system name and the page's purpose ("{name} Design System — DESIGN.md Preview")
 - The content of each section (list the specific token values and style names extracted from the frontmatter)
-- State explicitly that the Components section places a token-bound placeholder (an instance, or a screenshot if it's too wide) at the top of each card, with the property list attached below it — don't settle for a metadata table alone. Also state that this placeholder does not reproduce the original file's actual appearance
+- State explicitly that the Components section is text-only — no instance, placeholder rectangle, or other visual element; just each component's name, property list, and token references laid out as text cards
 - State explicitly that the property list must only include keys that actually exist in that component's `components` definition. Explicitly prohibit reading additional properties (width/height/spacing/gap, etc.) from the live Figma file and adding them to the list — `create_design` has access to the live file, so without this constraint it will fill gaps on its own
 - The overall tone direction ("minimal, editorial, generous whitespace")
 - Instruction that the page itself should use the file's variables and Text Styles
@@ -286,7 +231,7 @@ Include in the preview only the sections that exist in the frontmatter (e.g. omi
 
 When an auto-layout frame is appended (appendChild) into another auto-layout frame, the child's layoutSizingVertical/Horizontal automatically becomes "FIXED", locking it to its size at that moment (either the initial post-resize value, or the shrunk measured value after a FILL child loses its parent space to reference).
 
-The preview page's structure has multiple levels — "page → section frame → component card → the instance's internal children" — and appendChild happens at each level (adding a section to the page, adding a card to a section, placing an instance in a card). **Reverting just one level back to HUG does not fix the deeper nesting (e.g. a FILL-set child inside a card's instance) — it stays collapsed** — reproduced live as a card row like `product-card` collapsing to `H 48 (minimum)`.
+The preview page's structure has multiple levels — "page → section frame → card → the card's text elements" — and appendChild happens at each level (adding a section to the page, adding a card to a section, placing a text element in a card). **Reverting just one level back to HUG does not fix the deeper nesting — it stays collapsed** — reproduced live as a card row collapsing to its minimum size.
 
 **Required fix:** immediately after each appendChild at every level, apply the following recursively.
 
@@ -312,28 +257,11 @@ The preview page's structure has multiple levels — "page → section frame →
     sectionFrame.layoutSizingVertical = "HUG";
     fixFillCollapse(sectionFrame);
 
-    // Right after placing the component instance in the card
-    cardFrame.appendChild(instance);
-    fixFillCollapse(cardFrame);
+    // Right after adding a card to the Components section
+    sectionFrame.appendChild(cardFrame);
+    fixFillCollapse(sectionFrame);
 
 `node.height`/`.width` still return the correct pre-collapse measured values from the Figma Plugin API right after appendChild, so a separate pre-recording pass isn't necessary — but the call must happen immediately after each appendChild, within the same pass (deferring it can make the correct value unreadable).
-
-**Handling components wider than the card:**
-
-When a component's original width exceeds the card width (e.g. a 1440px nav vs. a 1032px card), resizing the instance would break auto layout, so fall back to a screenshot image via exportAsync.
-
-    if (comp.width > cardInnerWidth) {
-      const bytes = await comp.exportAsync({
-        format: "PNG",
-        constraint: { type: "WIDTH", value: cardInnerWidth }
-      });
-      const img = figma.createRectangle();
-      const imgHash = figma.createImage(bytes).hash;
-      img.fills = [{ type: "IMAGE", imageHash: imgHash, scaleMode: "FIT" }];
-      // Ensure a minimum height of 100px
-      const scaledH = Math.max(Math.round(comp.height * (cardInnerWidth / comp.width)), 100);
-      img.resize(cardInnerWidth, scaledH);
-    }
 
 ## Import Step 6 — Completion report
 
@@ -344,7 +272,7 @@ Report the creation results together with each verify step's verification result
 - Whether there was a naming-convention conflict with existing tokens, and the chosen resolution (if Import Step 2 triggered a confirmation)
 - Number of text styles (including Step 3-verify's fontSize binding confirmation / value-match counts)
 - Whether a font substitution occurred (if Import Step 3 triggered a fallback, the original font → substitute font and affected styles)
-- Number of components (including Step 4-verify's binding confirmation / sizingMode confirmation counts)
+- Number of component reference-info entries confirmed in Step 4 (state explicitly that they were not created as Figma nodes)
 - Number of document frames (if created)
 - Whether a preview page was created (attach a node link if it was)
 
@@ -519,13 +447,13 @@ After generating DESIGN.md, confirm via `ask_user_question` whether to create a 
 - **Create it** — generate a preview page visualizing the generated DESIGN.md content
 - **Skip** — don't create one
 
-If creating it, generate the preview page using `create_design`. The structure follows the same format as Import Step 5.
+If creating it, generate the preview page using `create_design`. The Colors/Typography/Spacing/Rounded sections follow the same format as Import Step 5. **The Components section differs** (see below) — Import is text-only since it creates no nodes, but Export's target components genuinely exist in the live file, so a real instance is fine to show.
 
 ### Export-specific notes
 
 - The preview page's content treats the frontmatter values generated in Export Step 2 as authoritative (the values written out to DESIGN.md, not the file's live variable values)
 - Style the page using the file's existing variables and Text Styles as-is (don't create new ones)
-- In the Components section, show the name, properties, and token references of the components detected during Export (label it as reference info, not a reproduction of the original)
+- **The Components section may place an instance of the real, exported component at the top of each card** (screenshot fallback via exportAsync if it's wider than the card). This is simply showing what genuinely exists in the file — not fabrication. The property list and token references beneath it should still be labeled as reference info, understood as a restatement of what's written to DESIGN.md
 - **The properties table may only list keys that actually appear in the generated DESIGN.md's `components` entry.** The original component being exported is real and lives in the live file, so `width`/`height`/`spacing` (gap) etc. can be read from it — but since those aren't part of the `components` definition, don't add them to the preview either. Adding a value to the preview alone that isn't in DESIGN.md implies DESIGN.md captured information it didn't
 
 ## Export Step 3 — Output
