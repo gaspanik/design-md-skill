@@ -20,7 +20,7 @@ description: >-
 
 # DESIGN.md Sync
 
-**Ver:** ver.202609101949
+**Ver:** ver.202609102002
 
 A skill that syncs DESIGN.md and a Figma file bidirectionally. Conforms to the Google design.md spec (https://github.com/google-labs-code/design.md/blob/main/docs/spec.md).
 
@@ -552,6 +552,7 @@ Don't stop at "I checked it" — mechanically count the following and report the
 - For every color listed in the frontmatter's `colors`, count one by one whether it's referenced at least once in the `components` definitions (as a token reference in `backgroundColor`/`textColor`/`borderColor`, etc.). Report it as "N of N colors referenced (unreferenced: list of color names)". **Do not remove unreferenced colors from the frontmatter** — colors sync in full regardless of whether a component happens to reference them (see "Token rules" above). Report the count only.
 - Identify every place in the body (Overview through Do's and Don'ts) that mentions a specific number or token name, and cross-check each one against the corresponding frontmatter value. If there's a mismatch, fix the body before outputting. Report as "N of N body mentions matched".
 - Check each `Do's and Don'ts` item, one by one, for contradictions with the `components` definitions (e.g. saying "don't use corner radius" while a component with a `rounded` token exists), and fix the wording if there's a contradiction.
+- **[Important — bug confirmed live] Check that every key inside `components` matches Google's spec vocabulary exactly** (`backgroundColor`/`textColor`/`typography`/`rounded`/`padding`/`size`/`width`/`height`, plus `variants`/`states`). Corner radius is the confirmed live case: Figma's own node property is named `cornerRadius`, and that collection-time name leaked straight through to the output instead of being mapped to `rounded` (the same leak could happen to any other property name). Unlike genuinely unspecified notation choices (padding's object shape, for instance, which the spec doesn't define), this is a deviation from vocabulary the spec explicitly fixes, so it isn't tolerable variance — fix any mismatched key before output and report "N of N `components` entries have spec-compliant keys".
 
 ## Export Step 2.5 — Create a preview page (optional)
 
