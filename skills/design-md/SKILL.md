@@ -5,14 +5,13 @@ description: >-
   Google design.md spec. Import mode reads a DESIGN.md — whether generated
   by this skill or written by hand/another tool — and creates matching
   Figma variable collections and text styles; components become real
-  Figma nodes only when width and height are both tokenized (buttons,
-  chips, pills), otherwise they stay as reference info in the
-  frontmatter data rather than a fabricated shell. Export mode reads
-  a file's existing variables, text styles, and components and
-  generates a DESIGN.md from them. Base tokens sync fully.
-  Interaction states and full variant matrices are out of scope; use
-  a tool built for that alongside this skill. Every write step
-  re-verifies its own output
+  Figma nodes only when width/height are both tokenized (buttons,
+  chips, pills), otherwise they stay as frontmatter reference info.
+  Export mode reads a file's existing variables, text styles, and
+  components and generates a DESIGN.md from them. Base tokens sync
+  fully. Interaction states and full variant matrices are out of
+  scope; use a tool built for that alongside this skill. Every write
+  step re-verifies its own output
   (bound variables, actual values, counts) rather than trusting the API
   call alone. Part of KMRVID Figma Skills, a 21-skill bundle covering
   AI-slop-resistant page generation, multi-layout exploration, layer
