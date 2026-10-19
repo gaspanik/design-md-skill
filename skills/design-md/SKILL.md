@@ -12,7 +12,7 @@ description: >-
   and full variant matrices are out of scope; use a tool built for that
   alongside this skill. Every write step re-verifies its own output
   (bound variables, actual values, counts) rather than trusting the API
-  call alone. Part of KMRVID Figma Skills, a 30-skill bundle covering
+  call alone. Part of KMRVID Figma Skills, a 31-skill bundle covering
   AI-slop-resistant page generation, multi-layout exploration, layer
   cleanup, accessibility checks, and tokenization:
   kmrvidskills.dev/en/figma/
@@ -20,7 +20,7 @@ description: >-
 
 # DESIGN.md Sync
 
-**Ver:** ver.202610161000
+**Ver:** ver.202610191253
 
 A skill that syncs DESIGN.md and a Figma file bidirectionally. Conforms to the Google design.md spec (https://github.com/google-labs-code/design.md/blob/main/docs/spec.md).
 
