@@ -118,4 +118,10 @@ Import 完了報告 — RawBlock Design System
 
 ---
 
-Built by Masaaki Komori - [@cipher](https://x.com/cipher) · Skill for [Figma](https://www.figma.com/)
+## Part of a larger set
+
+This skill is part of the Figma-agent skills bundled in **KMRVID Figma Skills** — covering AI-slop-resistant page generation, multi-layout-pattern exploration, layer cleanup, contrast/accessibility checks, tokenization, component audits, ALT text suggestions, and more: [kmrvidskills.dev/en/figma/](https://kmrvidskills.dev/en/figma/)
+
+---
+
+Built by [Masaaki Komori](https://gaspanik.com) - [@cipher](https://x.com/cipher) · Skill for [Figma](https://www.figma.com/)

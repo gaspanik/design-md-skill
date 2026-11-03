@@ -115,8 +115,8 @@ Components: 11 created (color-fill binding 8/10 — Ghost and Input are intentio
 
 ## Part of a larger set
 
-This skill is one of a 31-skill bundle, **KMRVID Figma Skills**, covering AI-slop-resistant page generation, multi-layout-pattern exploration, layer cleanup, contrast/accessibility checks, tokenization, component audits, ALT text suggestions, and more: [kmrvidskills.dev/en/figma/](https://kmrvidskills.dev/en/figma/)
+This skill is part of the Figma-agent skills bundled in **KMRVID Figma Skills** — covering AI-slop-resistant page generation, multi-layout-pattern exploration, layer cleanup, contrast/accessibility checks, tokenization, component audits, ALT text suggestions, and more: [kmrvidskills.dev/en/figma/](https://kmrvidskills.dev/en/figma/)
 
 ---
 
-Built by Masaaki Komori - [@cipher](https://x.com/cipher) · Skill for [Figma](https://www.figma.com/)
+Built by [Masaaki Komori](https://gaspanik.com) - [@cipher](https://x.com/cipher) · Skill for [Figma](https://www.figma.com/)
